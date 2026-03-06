@@ -1,13 +1,17 @@
 import rateLimit from 'express-rate-limit';
 
+const isDev = process.env.NODE_ENV === 'development';
+
 /**
- * General API rate limiter — 100 requests per 15 minutes per IP
+ * General API rate limiter — 100 req/15 min per IP
+ * Skipped in development mode so local testing never hits 429.
  */
 export const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100,
-    standardHeaders: true,   // Return RateLimit-* headers
-    legacyHeaders: false,     // Disable X-RateLimit-* headers
+    windowMs: 15 * 60 * 1000,
+    max: isDev ? 0 : 100,          // 0 = unlimited in dev
+    skip: () => isDev,             // bypass entirely in dev
+    standardHeaders: true,
+    legacyHeaders: false,
     message: {
         success: false,
         message: 'Too many requests from this IP, please try again after 15 minutes.',
@@ -15,12 +19,13 @@ export const apiLimiter = rateLimit({
 });
 
 /**
- * Auth-specific limiter — stricter: 10 attempts per 15 minutes
- * Protect login/register from brute-force
+ * Auth-specific limiter — 10 attempts per 15 min (brute-force protection)
+ * Skipped in development mode so repeated test runs don't get blocked.
  */
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10,
+    max: isDev ? 0 : 10,           // 0 = unlimited in dev
+    skip: () => isDev,             // bypass entirely in dev
     standardHeaders: true,
     legacyHeaders: false,
     message: {

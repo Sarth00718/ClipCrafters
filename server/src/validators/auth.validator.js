@@ -1,54 +1,54 @@
+import { body, validationResult } from 'express-validator';
 import { ApiError } from '../utils/apiResponse.js';
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
-const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
-
-const validate = (schema) => (req, res, next) => {
-    const errors = [];
-
-    for (const [field, rules] of Object.entries(schema)) {
-        const value = req.body[field];
-
-        if (rules.required && (value === undefined || value === '')) {
-            errors.push(`"${field}" is required`);
-            continue;
+// ─── Helper: Run validation and throw if errors ───────────────────────────
+const runValidation = (rules) => [
+    ...rules,
+    (req, _res, next) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return next(new ApiError(400, 'Validation failed', errors.array().map(e => e.msg)));
         }
+        next();
+    },
+];
 
-        if (value === undefined || value === '') continue; // optional, skip remaining checks
+// ─── Register Validator ───────────────────────────────────────────────────
+export const validateRegister = runValidation([
+    body('name')
+        .trim()
+        .notEmpty().withMessage('Name is required')
+        .isLength({ min: 2, max: 100 }).withMessage('Name must be 2–100 characters'),
 
-        if (rules.type === 'email' && !isValidEmail(value)) {
-            errors.push(`"${field}" must be a valid email address`);
-        }
+    body('email')
+        .trim()
+        .notEmpty().withMessage('Email is required')
+        .isEmail().withMessage('Must be a valid email address')
+        .normalizeEmail(),
 
-        if (rules.minLength && String(value).length < rules.minLength) {
-            errors.push(`"${field}" must be at least ${rules.minLength} characters`);
-        }
+    body('password')
+        .notEmpty().withMessage('Password is required')
+        .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+        .matches(/[A-Z]/).withMessage('Password must contain at least one uppercase letter')
+        .matches(/[0-9]/).withMessage('Password must contain at least one number')
+        .matches(/[!@#$%^&*(),.?":{}|<>]/).withMessage('Password must contain at least one special character'),
+]);
 
-        if (rules.maxLength && String(value).length > rules.maxLength) {
-            errors.push(`"${field}" must not exceed ${rules.maxLength} characters`);
-        }
+// ─── Login Validator ──────────────────────────────────────────────────────
+export const validateLogin = runValidation([
+    body('email')
+        .trim()
+        .notEmpty().withMessage('Email is required')
+        .isEmail().withMessage('Must be a valid email address')
+        .normalizeEmail(),
 
-        if (rules.enum && !rules.enum.includes(value)) {
-            errors.push(`"${field}" must be one of: ${rules.enum.join(', ')}`);
-        }
-    }
+    body('password')
+        .notEmpty().withMessage('Password is required'),
+]);
 
-    if (errors.length > 0) {
-        return next(new ApiError(422, 'Validation failed', errors));
-    }
-
-    next();
-};
-
-// ─── Auth Validators ────────────────────────────────────────────────────────
-
-export const validateRegister = validate({
-    name: { required: true, minLength: 2, maxLength: 100 },
-    email: { required: true, type: 'email' },
-    password: { required: true, minLength: 8, maxLength: 128 },
-});
-
-export const validateLogin = validate({
-    email: { required: true, type: 'email' },
-    password: { required: true, minLength: 1 },
-});
+// ─── Verify OTP Validator ─────────────────────────────────────────────────
+export const validateVerifyOtp = runValidation([
+    body('otp')
+        .notEmpty().withMessage('OTP is required')
+        .matches(/^\d{6}$/).withMessage('OTP must be a 6-digit number'),
+]);

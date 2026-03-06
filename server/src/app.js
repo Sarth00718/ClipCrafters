@@ -20,8 +20,27 @@ const app = express();
 // ─── Security Middleware ───────────────────────────────────────────────────
 app.use(helmet());
 
+// Accept any localhost origin (any port) in development, production origin from env otherwise
+const allowedOrigins = env.corsOrigin === '*'
+    ? null   // null = wildcard mode below
+    : env.corsOrigin.split(',').map((o) => o.trim());
+
 app.use(cors({
-    origin: env.corsOrigin,
+    origin: (origin, callback) => {
+        // Allow requests with no origin (curl, mobile apps, Postman)
+        if (!origin) return callback(null, true);
+        // Dev: allow any localhost / 127.0.0.1 port
+        if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+            return callback(null, true);
+        }
+        // Production: check against explicit allow-list
+        if (allowedOrigins && allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        // Wildcard mode (CORS_ORIGIN not set)
+        if (!allowedOrigins) return callback(null, true);
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

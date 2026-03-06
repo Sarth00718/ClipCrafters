@@ -1,35 +1,26 @@
-import jwt from 'jsonwebtoken';
 import { ApiError } from '../utils/apiResponse.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import User from '../models/User.js';
-import { env } from '../config/env.js';
+import { verifyAccessToken } from '../utils/token.js';
 
 /**
  * protect — verifies JWT and attaches the decoded user to req.user
+ * Supports both ACCESS_TOKEN_SECRET (new) and JWT_SECRET (legacy) tokens.
  * Usage: router.get('/me', protect, handler)
  */
 export const protect = asyncHandler(async (req, res, next) => {
-    let token;
-
     const authHeader = req.headers.authorization;
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.split(' ')[1];
-    }
-
-    if (!token) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
         throw new ApiError(401, 'Not authorized — no token provided');
     }
 
-    let decoded;
-    try {
-        decoded = jwt.verify(token, env.jwtSecret);
-    } catch {
-        throw new ApiError(401, 'Not authorized — token is invalid or expired');
-    }
+    const token = authHeader.split(' ')[1];
+
+    // verifyAccessToken throws ApiError(401) on failure
+    const decoded = verifyAccessToken(token);
 
     const user = await User.findById(decoded.id).select('-password');
-
     if (!user) {
         throw new ApiError(401, 'Not authorized — user no longer exists');
     }
@@ -41,7 +32,6 @@ export const protect = asyncHandler(async (req, res, next) => {
 /**
  * restrictTo — role-based access control (RBAC)
  * Usage: router.delete('/:id', protect, restrictTo('admin'), handler)
- *
  * @param {...string} roles - allowed roles
  */
 export const restrictTo = (...roles) =>
@@ -51,3 +41,5 @@ export const restrictTo = (...roles) =>
         }
         next();
     };
+
+
