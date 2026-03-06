@@ -48,3 +48,5 @@ coverage/
 *.pem
 *.key
 *.cert
+
+client/
